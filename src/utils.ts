@@ -1,8 +1,14 @@
 import { DEFAULT_BATCH_SIZE } from "./consts";
 import { LoadKey } from "./types";
 
+type BatchLoadQuery = {
+  where: LoadKey;
+  skip: number;
+  take: number;
+};
+
 async function batchLoad<ENTITY>(
-  loader: (query: any) => Promise<ENTITY[]>,
+  loader: (query: BatchLoadQuery) => Promise<ENTITY[]>,
   keys: LoadKey[],
   batchSize: number = DEFAULT_BATCH_SIZE,
   topSize?: number
@@ -32,55 +38,56 @@ async function batchLoad<ENTITY>(
 }
 
 async function batchLoadTopMany<ENTITY>(
-  loader: (query: any) => Promise<ENTITY[]>,
+  loader: (query: BatchLoadQuery) => Promise<ENTITY[]>,
   matcher: (key: LoadKey, entity: ENTITY) => boolean,
   keys: LoadKey[],
   topSize: number,
   batchSize: number = DEFAULT_BATCH_SIZE
 ): Promise<ENTITY[]> {
   const result: ENTITY[] = [];
-  if (keys.length === 0) {
+  if (keys.length === 0 || topSize <= 0) {
     return result;
   }
-  const { OR, ...otherConditions } = buildWhere(keys, false);
-  const counter = new Map<LoadKey, number>();
-  if (OR === undefined) {
-    return await batchLoad(loader, keys, batchSize, topSize);
-  } else {
-    let remainingKeys: LoadKey[] = OR;
-    let batch: ENTITY[] = [];
-    do {
-      const offset = remainingKeys.reduce(
-        (count, key) => count + (counter.get(key) ?? 0),
-        0
-      );
-      const query = {
-        where: { OR: remainingKeys, ...otherConditions },
-        skip: offset,
-        take: batchSize,
-      };
-      batch = await loader(query);
-      const nextRemainingKeys: LoadKey[] = [];
-      for (const entity of batch) {
-        for (const key of remainingKeys) {
-          if (matcher(key, entity)) {
-            const count = counter.get(key) ?? 0;
-            if (count < topSize) {
-              result.push(entity);
-              counter.set(key, count + 1);
-              break;
-            }
-          }
-          const count = counter.get(key) ?? 0;
-          if (count < topSize) {
-            nextRemainingKeys.push(key);
-          }
+  const where = buildWhere(keys, false);
+  const counts = keys.map(() => 0);
+  let offset = 0;
+  let batch: ENTITY[] = [];
+  do {
+    batch = await loader({
+      where,
+      skip: offset,
+      take: batchSize,
+    });
+    for (const entity of batch) {
+      for (let index = 0; index < keys.length; index += 1) {
+        const key = keys[index];
+        if (counts[index] >= topSize) {
+          continue;
+        }
+        if (matcher(key, entity)) {
+          result.push(entity);
+          counts[index] += 1;
+          break;
         }
       }
-      remainingKeys = nextRemainingKeys;
-    } while (remainingKeys.length > 0 && batch.length === batchSize);
-    return result;
+    }
+    offset += batch.length;
+  } while (batch.length === batchSize && counts.some((count) => count < topSize));
+  return result;
+}
+
+function compareObjects(
+  a: Record<string, unknown>,
+  b: Record<string, unknown>
+): boolean {
+  const keysA = Object.keys(a);
+  const keysB = Object.keys(b);
+  if (keysA.length !== keysB.length) {
+    return false;
   }
+  return keysA.every(
+    (key) => Object.prototype.hasOwnProperty.call(b, key) && compare(a[key], b[key])
+  );
 }
 
 function buildWhere(loadKeys: LoadKey[], allowIn: boolean = true): LoadKey {
@@ -89,17 +96,18 @@ function buildWhere(loadKeys: LoadKey[], allowIn: boolean = true): LoadKey {
   }
   const map = loadKeys.reduce((acc, loadKey) => {
     Object.entries(loadKey).forEach((entry) => {
-      const array: any[] = acc[entry[0]] ?? [];
+      const array = (acc[entry[0]] ?? []) as unknown[];
       if (!array.some((value) => compare(value, entry[1]))) {
         array.push(entry[1]);
       }
       acc[entry[0]] = array;
     });
     return acc;
-  }, {} as Record<string, any[]>);
+  }, {} as Record<string, unknown[]>);
   const allKeys = Object.keys(map);
-  const singleKeys = Object.entries(map)
-    .filter((entry: [string, any[]]) => entry[1].length === 1)
+  const entries = Object.entries(map) as [string, unknown[]][];
+  const singleKeys = entries
+    .filter((entry) => entry[1].length === 1)
     .map((entry) => entry[0]);
   const singleKeySet = new Set(singleKeys);
   const multiKeys = allKeys.filter((key) => !singleKeySet.has(key));
@@ -114,7 +122,7 @@ function buildWhere(loadKeys: LoadKey[], allowIn: boolean = true): LoadKey {
   }
   if (allowIn && multiKeys.length === 1) {
     const onlyMultiKey = multiKeys[0];
-    const values = map[onlyMultiKey];
+    const values = map[onlyMultiKey] as unknown[];
     if (!["function", "object"].includes(typeof values[0])) {
       where[onlyMultiKey] = { in: values };
       return where;
@@ -127,46 +135,57 @@ function buildWhere(loadKeys: LoadKey[], allowIn: boolean = true): LoadKey {
 function entityCompare<ENTITY>(
   original: ENTITY,
   updated: ENTITY,
-  fields: string[]
+  fields: readonly string[]
 ): string[] {
   return fields.filter((field) => {
-    const value1 = (original as any)[field];
-    const value2 = (updated as any)[field];
+    const value1 = (original as Record<string, unknown>)[field];
+    const value2 = (updated as Record<string, unknown>)[field];
     return !compare(value1, value2);
   });
 }
 
 function compare<T>(a: T, b: T): boolean {
-  // same value/reference
-  if (a === b) {
+  if (Object.is(a, b)) {
     return true;
   }
   const typeA = typeof a;
   const typeB = typeof b;
-  // different type
   if (typeA !== typeB) {
     return false;
   }
-  // same non-object type but differen value
+  if (a === null || b === null) {
+    return false;
+  }
+  if (a instanceof Date && b instanceof Date) {
+    return a.getTime() === b.getTime();
+  }
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) {
+      return false;
+    }
+    return a.every((value, index) => compare(value, b[index]));
+  }
   if (typeA !== "object") {
     return false;
   }
-  // same objects but different reference, value could be same though
-  return JSON.stringify(a) === JSON.stringify(b);
+  return compareObjects(
+    a as Record<string, unknown>,
+    b as Record<string, unknown>
+  );
 }
 
-function omit<T extends Record<string, any>, K extends keyof T>(
+function omit<T extends Record<string, unknown>, K extends Extract<keyof T, string>>(
   object: T,
-  keys: K | K[]
+  keys: K | readonly K[]
 ): Omit<T, K> {
-  keys = (typeof keys === "string" ? [keys] : keys) as K[];
-  return Object.keys(object)
-    .map((key) => key as K)
-    .filter((key) => !keys.includes(key))
-    .reduce((acc, key) => {
-      acc[key] = object[key];
-      return acc;
-    }, {} as any);
+  const keyList = (typeof keys === "string" ? [keys] : [...keys]) as K[];
+  const result = {} as Omit<T, K>;
+  for (const key of Object.keys(object) as K[]) {
+    if (!keyList.includes(key)) {
+      (result as Record<string, unknown>)[key as string] = object[key];
+    }
+  }
+  return result;
 }
 
 export {

@@ -33,6 +33,15 @@ function cloneValue<T>(value: T): T {
   return structuredClone(value);
 }
 
+function typedEntries<T extends Record<string, unknown>>(
+  record: T
+): [Extract<keyof T, string>, T[Extract<keyof T, string>]][] {
+  return Object.entries(record) as [
+    Extract<keyof T, string>,
+    T[Extract<keyof T, string>]
+  ][];
+}
+
 function isInFilter<T>(value: unknown): value is InFilter<T> {
   return (
     typeof value === "object" &&
@@ -257,16 +266,6 @@ function applyQuery<MODEL extends ModelRecord>(
   return filtered.slice(skip, take === undefined ? undefined : skip + take);
 }
 
-function requireOne<MODEL extends ModelRecord>(
-  row: MODEL | undefined,
-  methodName: string
-): MODEL {
-  if (row === undefined) {
-    throw new InMemoryDatabaseError(`${methodName} failed: record not found.`);
-  }
-  return row;
-}
-
 function findMatchingIndexes<MODEL extends ModelRecord>(
   rows: MODEL[],
   where: Where<MODEL>
@@ -373,7 +372,10 @@ class InMemoryCollection<MODEL extends ModelRecord> {
 }
 
 class InMemoryDatabase<SCHEMA extends ModelMap> {
-  private readonly collections = new Map<string, InMemoryCollection<any>>();
+  private readonly collections = new Map<
+    string,
+    InMemoryCollection<ModelRecord>
+  >();
 
   public constructor(seed: DatabaseSeed<SCHEMA> = {}) {
     this.seed(seed);
@@ -384,14 +386,19 @@ class InMemoryDatabase<SCHEMA extends ModelMap> {
   ): InMemoryCollection<SCHEMA[KEY]> {
     if (!this.collections.has(name)) {
       const collection = new InMemoryCollection<SCHEMA[KEY]>();
-      this.collections.set(name, collection);
+      this.collections.set(
+        name,
+        collection as unknown as InMemoryCollection<ModelRecord>
+      );
     }
-    return this.collections.get(name)! as InMemoryCollection<SCHEMA[KEY]>;
+    return this.collections.get(name)! as unknown as InMemoryCollection<SCHEMA[KEY]>;
   }
 
   public seed(seed: DatabaseSeed<SCHEMA>): void {
-    for (const [name, rows] of Object.entries(seed)) {
-      this.table(name as keyof SCHEMA & string).reset(rows as any);
+    for (const [name, rows] of typedEntries(seed)) {
+      if (rows !== undefined) {
+        this.table(name).reset(rows);
+      }
     }
   }
 

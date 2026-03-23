@@ -14,6 +14,8 @@ Airent IMDB Plugin - generate Airent entity wrappers backed by an in-memory data
 npm install @airent/imdb
 ```
 
+This package expects a modern Node runtime. The current runtime uses `Proxy` and `structuredClone`, so treat Node 18+ as the supported baseline.
+
 Then configure Airent:
 
 ```bash
@@ -34,6 +36,8 @@ export default createInMemoryDatabase<{
   user: UserModel;
 }>();
 ```
+
+The generic schema is the source of truth for valid collection names. The runtime lazily creates collections on first access, so keeping that schema aligned with your generated model types matters.
 
 Point `airent.config.json` at that import:
 
@@ -63,5 +67,11 @@ The IMDB runtime keeps a small CRUD surface, but supports common filter shapes u
 - comparison filters: `gt`, `gte`, `lt`, `lte`
 - string filters: `contains`, `startsWith`, `endsWith`, optional `mode: 'insensitive'`
 - list controls: `orderBy`, `skip`, `take`
+
+Behavior notes:
+
+- `findUnique`, `update`, and `delete` expect the `where` clause to resolve to at most one record.
+- `update` performs a shallow merge on `data`.
+- Returned records are cloned on read and write so test code does not mutate stored state by reference.
 
 There is no separate DBML or Prisma generation step. Update your Airent schemas, then run `npx airent`.

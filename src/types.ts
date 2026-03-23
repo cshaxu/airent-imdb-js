@@ -1,6 +1,6 @@
-type LoadKey = Record<string, any>;
+type LoadKey = Record<string, unknown>;
 
-type ModelRecord = Record<string, any>;
+type ModelRecord = Record<string, unknown>;
 type ModelMap = Record<string, ModelRecord>;
 
 type SortOrder = "asc" | "desc";
@@ -88,10 +88,10 @@ type DatabaseSeed<SCHEMA extends ModelMap> = Partial<{
 
 type ValidateImdbArgs<T, U> = {
   [KEY in keyof T]: KEY extends keyof U ? T[KEY] : never;
-} & (T extends { select: any }
+} & (T extends { select: unknown }
   ? "Property `select` not supported by @airent/imdb."
   : {}) &
-  (T extends { include: any }
+  (T extends { include: unknown }
     ? "Property `include` not supported by @airent/imdb."
     : {});
 

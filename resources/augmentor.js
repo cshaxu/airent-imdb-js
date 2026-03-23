@@ -8,6 +8,7 @@ function buildCollectionName(entity) {
 }
 
 function augmentConfig(config) {
+  config.imdb = config.imdb ?? {};
   const { libImportPath } = config.imdb;
   config._packages.imdb = config._packages.imdb ?? {};
   config._packages.imdb.baseToLibFull = libImportPath
@@ -30,11 +31,23 @@ function augmentConfig(config) {
  */
 
 function buildBeforeBase(entity, config) {
+  const baseImports = [
+    "CreateArgs",
+    "DeleteArgs",
+    "FindFirstArgs",
+    "FindManyArgs",
+    "FindOneArgs",
+    "FindUniqueArgs",
+    "UpdateArgs",
+    "ValidateImdbArgs",
+    "entityCompare",
+    ...buildLoaderImports(entity),
+  ];
   return [
     "// airent-imdb imports",
-    `import { CreateArgs, DeleteArgs, FindFirstArgs, FindManyArgs, FindOneArgs, FindUniqueArgs, UpdateArgs, ValidateImdbArgs, batchLoad, batchLoadTopMany, entityCompare } from '${config._packages.imdb.baseToLibFull}';`,
+    `import { ${baseImports.join(", ")} } from '${config._packages.imdb.baseToLibFull}';`,
     "// config imports",
-    JSON.parse(JSON.stringify(config.imdb.imdbImport)) ??
+    config.imdb.imdbImport ??
       "import imdb from 'TODO: specify imdbImport in your airent config';",
     "// entity imports",
     `import { ${codeUtils.toPascalCase(entity.name)}PrimitiveField } from '${
@@ -65,6 +78,20 @@ function buildModelImports(entity, relativePath) {
       )}Model } from '${relativePath}/${type._entity._strings.moduleName}';`;
     })
     .filter((line) => line.length > 0);
+}
+
+function buildLoaderImports(entity) {
+  const hasImdbAssociation = entity.fields.some(
+    (field) => codeUtils.isAssociationField(field) && field.isImdb
+  );
+  if (!hasImdbAssociation) {
+    return [];
+  }
+  const imports = ["batchLoad"];
+  if (entity.fields.some((field) => field.take)) {
+    imports.push("batchLoadTopMany");
+  }
+  return imports;
 }
 
 function buildAfterType(entity) {

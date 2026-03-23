@@ -1,5 +1,5 @@
-type LoadKey = Record<string, any>;
-type ModelRecord = Record<string, any>;
+type LoadKey = Record<string, unknown>;
+type ModelRecord = Record<string, unknown>;
 type ModelMap = Record<string, ModelRecord>;
 type SortOrder = "asc" | "desc";
 type StringMatchMode = "default" | "insensitive";
@@ -61,8 +61,8 @@ type DatabaseSeed<SCHEMA extends ModelMap> = Partial<{
 type ValidateImdbArgs<T, U> = {
     [KEY in keyof T]: KEY extends keyof U ? T[KEY] : never;
 } & (T extends {
-    select: any;
+    select: unknown;
 } ? "Property `select` not supported by @airent/imdb." : {}) & (T extends {
-    include: any;
+    include: unknown;
 } ? "Property `include` not supported by @airent/imdb." : {});
 export { ComparableFilter, CreateArgs, DatabaseSeed, DeleteArgs, EqualityFilter, FieldFilter, FieldOperatorFilter, FindFirstArgs, FindManyArgs, FindOneArgs, FindUniqueArgs, InFilter, LoadKey, ModelMap, ModelRecord, NotFilter, OrderBy, SortOrder, StringFilter, StringMatchMode, UpdateArgs, ValidateImdbArgs, Where, };

@@ -1,5 +1,5 @@
 // airent-imdb imports
-import { CreateArgs, DeleteArgs, FindFirstArgs, FindManyArgs, FindOneArgs, FindUniqueArgs, UpdateArgs, ValidateImdbArgs, batchLoad, batchLoadTopMany, entityCompare } from '../../../../src/index';
+import { CreateArgs, DeleteArgs, FindFirstArgs, FindManyArgs, FindOneArgs, FindUniqueArgs, UpdateArgs, ValidateImdbArgs, entityCompare, batchLoad } from '../../../../src/index';
 // config imports
 import imdb from '../../imdb';
 // entity imports
