@@ -38,11 +38,12 @@
     "lib",
     "resources"
   ],
-  "dependencies": {
+  "peerDependencies": {
     "airent": "github:cshaxu/airent-js#3ed460e82f66ceb038ab833116f1201830a7d161"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",
+    "airent": "github:cshaxu/airent-js#3ed460e82f66ceb038ab833116f1201830a7d161",
     "crlf": "^1.1.1",
     "typescript": "^5.9.3"
   }
